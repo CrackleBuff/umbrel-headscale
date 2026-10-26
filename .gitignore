@@ -1,0 +1,12 @@
+# Never commit runtime state, keys, databases, rendered config or local test output.
+cracklebuff-headscale/data/**
+!cracklebuff-headscale/data/*/
+!cracklebuff-headscale/data/*/.gitkeep
+*.key
+*.sqlite
+*.sqlite-*
+*.db
+*.pem
+*.crt
+.env
+tests/out/

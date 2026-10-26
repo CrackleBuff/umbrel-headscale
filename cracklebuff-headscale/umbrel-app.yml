@@ -1,0 +1,92 @@
+manifestVersion: 2.0
+id: cracklebuff-headscale
+storage:
+  dataRoot: data
+environment:
+  - name: HS_SERVER_DOMAIN
+    services:
+      - init
+    note: >-
+      Required. Public DNS name of this server, e.g. headscale.example.com. It must resolve to your public IP,
+      and your router must forward public TCP 443 to this Umbrel's port 30443 and UDP 3478 to port 3478.
+      Headscale stays off (inert) until this is set.
+  - name: HS_ACME_EMAIL
+    services:
+      - init
+    note: Optional e-mail for Let's Encrypt expiry notices. Leave empty to register without one.
+  - name: HS_MAGICDNS_DOMAIN
+    services:
+      - init
+    default: tailnet.internal
+    note: Base domain for device names (MagicDNS). Must not equal or contain the public domain.
+  - name: HS_TAILSCALE_DERP
+    services:
+      - init
+    default: "false"
+    options:
+      - "false"
+      - "true"
+    note: >-
+      false (default) = only this server's embedded relay. true = also use Tailscale Inc.'s public relays as a fallback
+      (traffic stays end-to-end encrypted, but Tailscale can see relay metadata such as IP addresses).
+  - name: HS_NODE_EXPIRY
+    services:
+      - init
+    default: "0"
+    note: Default key expiry for new user devices, e.g. 180d. 0 = never expire. Tagged devices never expire.
+  - name: HS_LOG_LEVEL
+    services:
+      - init
+    default: info
+    options:
+      - info
+      - warn
+      - error
+      - debug
+    note: Headscale log level.
+category: networking
+name: Headscale
+version: "0.29.6"
+tagline: Self-hosted Tailscale control server
+icon: https://raw.githubusercontent.com/juanfont/headscale/v0.29.6/docs/assets/logo/headscale3-dots.png
+description: >-
+  ⚠️ This app runs a public-facing server. Before installing, you need a public DNS name pointing at your home IP and
+  two port forwards on your router: TCP 443 → this Umbrel's port 30443, and UDP 3478 → port 3478. Then set
+  "Public domain" in the app's settings. Until then Headscale stays off.
+
+
+  Headscale is an open-source, self-hosted implementation of the Tailscale control server. Use the official Tailscale
+  apps on your phones and computers, but keep the coordination server (who is in your network, their keys and your
+  access rules) on your own Umbrel instead of Tailscale's cloud.
+
+
+  Secure by default:
+
+
+  - New networks deny all traffic until you add access rules to the policy file
+
+  - Runs as an unprivileged user with a read-only filesystem and no extra capabilities; no Docker socket
+
+  - Certificates come from Let's Encrypt automatically; gRPC, metrics and debug endpoints only listen inside the container,
+    and the public REST API needs an API key (none is created)
+
+  - Its own relay (DERP) and STUN server; Tailscale's public relays are off unless you turn them on
+
+  - No pre-auth keys are created; you approve every device yourself
+
+
+  The app page shows status only. Devices are approved from the Umbrel terminal; see the README for commands,
+  backup and restore, and the threat model.
+releaseNotes: ""
+developer: Headscale authors (packaged by CrackleBuff)
+website: https://headscale.net
+dependencies: []
+repo: https://github.com/juanfont/headscale
+support: https://github.com/CrackleBuff/umbrel-headscale/issues
+port: 8487
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+submitter: CrackleBuff
+submission: https://github.com/CrackleBuff/umbrel-headscale

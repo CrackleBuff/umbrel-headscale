@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Headscale</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;color:#1d1d1f;background:#fafafa}
+h1{font-size:1.6rem}code,pre{background:#eee;border-radius:4px;padding:.1rem .3rem;font-size:.9em}pre{padding:.6rem;overflow:auto}
+.card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:1rem 1.2rem;margin:1rem 0}
+.ok{color:#0a7d32}.bad{color:#b00020}.muted{color:#666}td{padding:.2rem .8rem .2rem 0;vertical-align:top}
+</style></head><body>
+<h1>Headscale</h1>
+<p class="muted">Self-hosted Tailscale control server. This page is protected by your Umbrel login and only shows status; it cannot change anything.</p>
+<div class="card" id="status">Loading status...</div>
+<div class="card">
+<h2>Connect a device</h2>
+<p>Official Tailscale apps work with Headscale. Point them at your server URL:</p>
+<pre>tailscale up --login-server https://<span class="dom">YOUR-DOMAIN</span></pre>
+<p>On iOS/macOS/Android set a custom coordination server in the app settings. The device shows a register page with an ID; approve it on the Umbrel (Settings &rarr; Advanced &rarr; Terminal):</p>
+<pre>sudo docker exec cracklebuff-headscale_headscale_1 headscale users create alice
+sudo docker exec cracklebuff-headscale_headscale_1 headscale auth register --user alice --auth-id &lt;ID&gt;</pre>
+<p>New tailnets <b>deny all traffic</b> until you add rules to the policy file. See the README.</p>
+</div>
+<div class="card"><h2>Docs</h2><p>README, threat model and backup/upgrade notes: <a href="https://github.com/CrackleBuff/umbrel-headscale" rel="noopener noreferrer">github.com/CrackleBuff/umbrel-headscale</a>. Headscale docs: <a href="https://headscale.net/stable/" rel="noopener noreferrer">headscale.net</a>.</p></div>
+<script>
+const reasons={ok:"",no_domain:"Set \u201cPublic domain\u201d in this app's settings (umbrelOS \u2192 app \u2192 Settings).",bad_domain:"The public domain setting is not a valid DNS name.",bad_email:"The Let's Encrypt e-mail setting is not a valid address.",bad_magicdns:"The MagicDNS domain setting is not a valid DNS name.",magicdns_contains_server:"The MagicDNS domain must not equal or contain the public domain.",bad_derp:"Tailscale DERP setting must be true or false.",bad_loglevel:"Log level must be debug, info, warn or error.",bad_expiry:"Node key expiry must be 0 or a number followed by h or d (e.g. 180d).",unsafe_files:"Refusing to start: the data folder contains symlinks or device files.",implicit_allow_all:"Refusing to start: policy.hujson has no \u201cacls\u201d or \u201cgrants\u201d list, which Headscale treats as ALLOW ALL. Add one (it may be empty to deny everything)."};
+function row(k,v){const tr=document.createElement('tr');const a=document.createElement('td');a.textContent=k;const b=document.createElement('td');if(v instanceof Node)b.appendChild(v);else b.textContent=v;tr.append(a,b);return tr}
+function flag(ok,y,n){const s=document.createElement('span');s.className=ok?'ok':'bad';s.textContent=ok?y:n;return s}
+fetch('cgi-bin/status',{cache:'no-store'}).then(r=>r.json()).then(s=>{
+ const el=document.getElementById('status');el.textContent='';
+ const h=document.createElement('h2');h.textContent='Status';el.appendChild(h);
+ const t=document.createElement('table');
+ if(s.state!=='configured'){t.append(row('State',flag(false,'','Not configured')),row('Next step',reasons[s.reason]||s.reason));}
+ else{
+  document.querySelectorAll('.dom').forEach(e=>e.textContent=s.domain);
+  t.append(row('Server URL','https://'+s.domain),row('Public /health',flag(s.publicHealth,'reachable (pass)','not reachable from this Umbrel \u2014 check port forwarding / DNS / NAT loopback')),
+   row('Noise public key',s.noiseKey||'unknown'),row('MagicDNS domain',s.magicdns),row('Tailscale public DERP',s.tailscaleDerp==='true'?'on':'off (embedded DERP only)'));
+ }
+ el.appendChild(t);
+}).catch(()=>{document.getElementById('status').textContent='Status unavailable.'});
+</script>
+</body></html>

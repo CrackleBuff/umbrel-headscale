@@ -1,0 +1,38 @@
+// Example Headscale policy for a small home network. Copy the parts you need
+// into data/policy/policy.hujson, then restart the app.
+//
+// Users are written with a trailing "@" (e.g. "alice@") because Headscale
+// users created on the command line have no e-mail domain.
+// Check a file before restarting:
+//   sudo docker exec cracklebuff-headscale_headscale_1 headscale policy check -f /etc/headscale-policy/policy.hujson
+{
+  "groups": {
+    "group:admins": ["alice@"],
+    "group:family": ["alice@", "bob@"],
+  },
+
+  // Only admins may put tags on devices.
+  "tagOwners": {
+    "tag:server": ["group:admins"],
+  },
+
+  "hosts": {
+    "home-lan": "192.168.1.0/24",
+  },
+
+  "acls": [
+    // Admins can reach everything, including the home LAN through a subnet router.
+    {"action": "accept", "src": ["group:admins"], "dst": ["*:*", "home-lan:*"]},
+
+    // Family devices can reach each other and the servers' web ports only.
+    {"action": "accept", "src": ["group:family"], "dst": ["group:family:*", "tag:server:80,443"]},
+
+    // Everything else is denied.
+  ],
+
+  // Let admins use any device as an exit node and approve the LAN route automatically.
+  "autoApprovers": {
+    "routes": {"192.168.1.0/24": ["group:admins"]},
+    "exitNode": ["group:admins"],
+  },
+}

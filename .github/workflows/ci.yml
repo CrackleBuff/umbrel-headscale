@@ -1,0 +1,24 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compose file is up to date
+        run: python3 tools/build.py --check
+      - name: Init script tests
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq busybox-static python3-yaml
+          sudo BUSYBOX=/bin/busybox tests/test-init.sh
+      - name: Images are pinned by digest
+        run: |
+          if grep -E '^\s*image:' cracklebuff-headscale/docker-compose.yml | grep -Ev '@sha256:[0-9a-f]{64}$'; then
+            echo "unpinned image"; exit 1
+          fi
