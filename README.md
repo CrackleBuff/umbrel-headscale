@@ -293,7 +293,8 @@ See [`tests/README.md`](tests/README.md).
 
 ## Reporting security issues
 
-See [SECURITY.md](SECURITY.md). Vulnerabilities in Headscale itself go to the
+See [SECURITY.md](SECURITY.md). The reviews done so far, and what they did not cover, are listed in
+[docs/SECURITY-REVIEWS.md](docs/SECURITY-REVIEWS.md). Vulnerabilities in Headscale itself go to the
 [Headscale project](https://github.com/juanfont/headscale/security).
 
 ## License

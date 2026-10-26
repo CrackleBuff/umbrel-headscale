@@ -35,4 +35,6 @@ Only the latest app version in this store is supported. It tracks the latest sta
   the health check (one request per path, no redirects followed).
 - Only TCP 443 (→30443) and UDP 3478 need to be reachable from the internet.
 
-See the threat model and hardening notes in the [README](README.md#threat-model).
+See the threat model and hardening notes in the [README](README.md#threat-model). The security reviews done so
+far (AI-assisted, verified by hand; no professional audit yet) are listed in
+[docs/SECURITY-REVIEWS.md](docs/SECURITY-REVIEWS.md).
