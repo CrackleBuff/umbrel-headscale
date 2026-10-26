@@ -199,7 +199,7 @@ it like the keys to your home network.
 | Internet → relay abuse | DERP/STUN | `verify_clients: true`; STUN is stateless. |
 | A device in your tailnet | Other devices, LAN | Default-deny policy; fail-closed check against an empty/`{}` policy; subnet routes and exit nodes need explicit approval. |
 | LAN users | Status page | Behind the umbrelOS login (app proxy). It shows only domain, settings and a health boolean. |
-| Other Umbrel apps | Docker network | Headscale does not mount the Docker socket or other apps' data. The init helper runs with no network. |
+| Other Umbrel apps | Docker network | Headscale runs on its own private bridge network (`edge`), not `umbrel_main_network`, so a compromised Headscale cannot reach other apps' internal ports. It does not mount the Docker socket or other apps' data. The init helper has no network at all. |
 | Umbrel admin / shell | Everything | Full trust: can read keys and run `headscale` commands. Use a strong umbrelOS password and keep SSH off the internet. |
 | Supply chain | Images | Images pinned by digest; Headscale binary checked against upstream `checksums.txt` at packaging time. |
 
@@ -238,11 +238,12 @@ and denial-of-service against your home connection.
 | Service | Image | User | Notes |
 | --- | --- | --- | --- |
 | `init` | busybox 1.38.0 (digest) | root | Runs once before Headscale, with **no network**, read-only root, `cap_drop: ALL` plus only `CHOWN`, `DAC_OVERRIDE`, `FOWNER` (needed to fix ownership of files copied in by users or restores), `no-new-privileges`. Validates settings, renders the config, creates the default-deny policy if missing, fixes modes, refuses symlinks/devices, and writes the status files. `restart: on-failure`. |
-| `headscale` | headscale v0.29.6 (digest) | 65532 | Read-only root, `cap_drop: ALL`, `no-new-privileges`, `pids_limit`, tmpfs for `/tmp` and the socket dir, config and policy mounted read-only. Healthcheck `headscale health`. |
+| `headscale` | headscale v0.29.6 (digest) | 65532 | Own `edge` network, read-only root, `cap_drop: ALL`, `no-new-privileges`, `pids_limit`, `mem_limit: 512m`, tmpfs for `/tmp` and the socket dir, config and policy mounted read-only. Healthcheck `headscale health`. |
 | `web` | busybox 1.38.0 (digest) | 65534 | Static status page + a tiny CGI reading the status file. Read-only, `cap_drop: ALL`, `no-new-privileges`. |
 
-The Umbrel linter warns about `cap_add` and `security_opt`. Those are intentional: `security_opt` only adds
-`no-new-privileges:true`, and the init capabilities are the minimum needed to `chown`/`chmod` app data.
+The Umbrel linter warns about `cap_add`, `security_opt` and top-level `networks`. All are intentional:
+`security_opt` only adds `no-new-privileges:true`, the init capabilities are the minimum needed to `chown`/`chmod`
+app data, and the extra `edge` network isolates the internet-facing service from other apps.
 
 ## How the app is built
 

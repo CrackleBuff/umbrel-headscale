@@ -20,6 +20,7 @@ Only the latest app version in this store is supported. It tracks the latest sta
 - Images pinned by version and digest; no `latest` tags.
 - No secrets or host-specific values in the repository. All keys are generated on the device.
 - Headscale runs as uid 65532 with a read-only filesystem, no capabilities, `no-new-privileges`, and no Docker socket.
+- Headscale is isolated on its own Docker network, away from other Umbrel apps.
 - Fails closed: missing or invalid settings, symlinks in the data folder, or a policy without an `acls`/`grants`
   list keep the server inert instead of starting it in an unsafe state.
 - Only TCP 443 (→30443) and UDP 3478 need to be reachable from the internet.

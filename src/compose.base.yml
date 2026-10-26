@@ -35,7 +35,11 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 512
+    mem_limit: 512m
     stop_grace_period: 30s
+    # Internet-facing, so keep it off umbrel_main_network: it cannot reach other
+    # apps' internal ports. It still has outbound internet (Let's Encrypt).
+    networks: [edge]
     tmpfs:
       - /tmp:size=64m,mode=1777
       - /var/run/headscale:size=1m,uid=65532,gid=65532,mode=0700
@@ -68,6 +72,7 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 64
+    mem_limit: 64m
     command: ["httpd", "-f", "-v", "-p", "8080", "-h", "/www"]
     depends_on:
       init:
@@ -75,3 +80,7 @@ services:
     volumes:
       - ${APP_DATA_DIR}/data/www:/www:ro
       - ${APP_DATA_DIR}/data/status:/status:ro
+
+networks:
+  # Private bridge network for the internet-facing headscale service only.
+  edge: {}
