@@ -24,7 +24,7 @@ were scrubbed of secrets and deployment details.
 | 2026-10-26 | openai/gpt-6.1-sol | yes | 8c62da0 | 10 | 6 / 4 | 62e6cf4 |
 | 2026-10-26 | openai/gpt-6.1-sol, critique pass | no: saw the first-pass audit, the earlier verdicts and the fixed tree | 62e6cf4 (before commit) | 5 | 5 / 0 (2 only partly) | 62e6cf4 |
 
-Counts are per numbered finding. "Real" includes partly-correct findings and documentation-only issues. One
+Counts are per numbered finding and are approximate for the qwen, grok-4.6 and grok-4.20-multi-agent rows, where some calls were judgement calls. "Real" includes partly-correct findings and documentation-only issues. One
 low-risk item was accepted rather than fixed (see below). Several models often reported the same issue.
 
 ## Round 1: first-pass audit (5f834a1 → 5fbb08b)
