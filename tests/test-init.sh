@@ -173,6 +173,10 @@ ok cgi-stale "$(cgi $d | grep -o '"checked":[a-z]*,"publicHealth":[a-z]*')" '"ch
 printf 'DOMAIN=old.example.com\nTIME=%s\nHEALTH=true\nKEY=%s\n' "$now" "$k" > $d/probe/result
 ok cgi-other-domain "$(cgi $d | grep -o '"checked":[a-z]*,"publicHealth":[a-z]*')" '"checked":false,"publicHealth":false'
 ok probe-no-wget "$(grep -c wget "$here/../src/probe.sh")" 0
+# probe reports the real server key, not the all-zero legacyPublicKey that /key lists first
+eval "$(grep '^pubkey()' "$here/../src/probe.sh")"
+kz=$(printf 'mkey:%064d' 0); kr=mkey:$(printf 'ab%.0s' $(seq 32))
+ok probe-pubkey "$(printf 'HTTP/1.1 200 OK\r\n\r\n{"legacyPublicKey":"%s","publicKey":"%s"}' "$kz" "$kr" | pubkey)" "$kr"
 rm -rf "$bbbin"
 
 rm -rf "$base"

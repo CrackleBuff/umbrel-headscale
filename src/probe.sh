@@ -14,12 +14,14 @@ req() {  # req PATH -> first 4 KB of the raw response, or nothing unless HTTP 20
     timeout 8 ssl_client -n "$DOMAIN" "$DOMAIN:443" 2>/dev/null | head -c 4096)
   case "$_r" in "HTTP/1.1 200 "*|"HTTP/1.0 200 "*) printf '%s\n' "$_r";; esac
 }
+# /key returns {"legacyPublicKey":"mkey:000...","publicKey":"mkey:..."}: take publicKey only.
+pubkey() { grep -o '"publicKey":"mkey:[0-9a-f]\{64\}"' | grep -o 'mkey:[0-9a-f]\{64\}' | head -n 1; }
 while :; do
   STATE=$(get STATE); DOMAIN=$(get DOMAIN)
   if [ "$STATE" = configured ] && [ -n "$DOMAIN" ]; then
     HEALTH=false
     if req /health | grep -q '"status":"pass"'; then HEALTH=true; fi
-    KEY=$(req '/key?v=130' | grep -o 'mkey:[0-9a-f]\{64\}' | head -n 1)
+    KEY=$(req '/key?v=130' | pubkey)
     { echo "DOMAIN=$DOMAIN"; echo "TIME=$(date +%s)"; echo "HEALTH=$HEALTH"; echo "KEY=$KEY"; } > /probe/result.new &&
       mv -f /probe/result.new /probe/result
   fi
