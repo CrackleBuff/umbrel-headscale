@@ -13,10 +13,11 @@ jobs:
           persist-credentials: false
       - name: Compose file is up to date
         run: python3 tools/build.py --check
-      - name: Init script tests
+      - name: Init script tests (with the busybox from the pinned image)
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq busybox-static python3-yaml
-          sudo BUSYBOX=/bin/busybox tests/test-init.sh
+          sudo apt-get update -qq && sudo apt-get install -y -qq python3-yaml
+          tools/fetch-busybox.sh "$RUNNER_TEMP/busybox-root"
+          sudo BUSYBOX="$RUNNER_TEMP/busybox-root/bin/busybox" tests/test-init.sh
       - name: Compose guard rails (no host hooks, privileges or extra mounts)
         run: |
           python3 tools/check_compose.py

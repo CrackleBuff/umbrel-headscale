@@ -3,7 +3,10 @@
 - `test-init.sh` runs the init script (extracted from the generated compose file) against temporary
   directories with a static busybox and checks validation, rendered config, permissions, the default-deny
   policy, the empty-policy guard and symlink refusal. Needs root (for `chown`):
-  `sudo BUSYBOX=/path/to/busybox-static tests/test-init.sh`
+  `sudo BUSYBOX=/path/to/busybox tests/test-init.sh`. Use the busybox from the pinned image
+  (`tools/fetch-busybox.sh DEST`, needs Docker), as CI does: distribution builds differ (Ubuntu's
+  `busybox-static` has no `find -delete`, so init fails closed there). The script checks for this first. When
+  an assertion fails it prints the output of the last init run.
 - `run-init.sh OUTDIR [VAR=value ...]` runs the init script once, for manual inspection.
 - The same script also checks the checked policy copy Headscale reads (`config/policy.hujson`), the `probe/`
   folder, and that the status CGI makes no network requests and only shows strictly-formatted probe values.

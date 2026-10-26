@@ -4,8 +4,30 @@ set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 base=$(mktemp -d); pass=0; failn=0
 st() { sed -n "s/^$2=//p" "$1/status/state"; }
-ok() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "ok   $1"; else failn=$((failn+1)); echo "FAIL $1: got '$2' want '$3'"; fi; }
-run() { local d=$base/$1; shift; rm -rf "$d"; mkdir -p "$d"; "$here/run-init.sh" "$d" "$@" >/dev/null 2>&1; echo "$d"; }
+# init_run DIR [VAR=value ...]: run init once; its output goes to $base/last.log and is shown on failures.
+init_run() { "$here/run-init.sh" "$@" >"$base/last.log" 2>&1; }
+ok() {
+  if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "ok   $1"
+  else failn=$((failn+1)); echo "FAIL $1: got '$2' want '$3'"
+    if [ -s "$base/last.log" ]; then echo "     output of the last init run:"; awk '{l[NR]=$0} END {for (i=1;i<=NR;i++) if (i<=8 || i>NR-12) print "     | " l[i]; else if (i==9) print "     | ..."}' "$base/last.log"; fi
+  fi
+}
+run() { local d=$base/$1; shift; rm -rf "$d"; mkdir -p "$d"; init_run "$d" "$@"; echo "$d"; }
+
+# The init script only ever runs in the pinned busybox image. A busybox built
+# with different options (e.g. Ubuntu's busybox-static has no `find -delete`)
+# makes init fail closed and every test fail, so check the applets first.
+bb=${BUSYBOX:-$(command -v busybox)}
+pre=$(mktemp -d); mkdir "$pre/x"
+if ! "$bb" find "$pre" -mindepth 1 -delete 2>/dev/null || [ -e "$pre/x" ]; then
+  echo "busybox at $bb lacks 'find -delete'. Use the busybox from the pinned image (tools/fetch-busybox.sh)." >&2
+  rm -rf "$pre"; exit 2
+fi
+applets=$("$bb" --list)
+for a in awk sed grep find stat chown chmod mv cmp tr timeout ssl_client date; do
+  printf '%s\n' "$applets" | grep -qx "$a" || { echo "busybox at $bb lacks the '$a' applet" >&2; rm -rf "$pre"; exit 2; }
+done
+rm -rf "$pre"
 
 d=$(run unconf);                                   ok unconfigured "$(st $d REASON)" no_domain
 ok unconfigured-lib-untouched "$(ls -A $d/lib | wc -l)" 0
@@ -42,7 +64,7 @@ ok policy-path-snapshot "$(grep -c '^  path: /etc/headscale/policy.hujson$' $d/c
 ok policy-snapshot-same "$(cmp -s $d/policy/policy.hujson $d/config/policy.hujson && echo same)" same
 ok policy-snapshot-perm "$(stat -c '%a %u:%g' $d/config/policy.hujson)" "640 0:65532"
 ok probe-dir-owner "$(stat -c '%u:%g %a' $d/probe)" "65534:65534 755"
-"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+init_run $d HS_SERVER_DOMAIN=hs.example.com
 ok default-policy-restart "$(st $d REASON)" ok
 ok expiry-default "$(d2=$(run expdef HS_SERVER_DOMAIN=hs.example.com); grep -c 'expiry: 4320h' $d2/config/config.yaml)" 1
 ok inert-derp-removed "$(ls $d/config | grep -c derp-inert)" 0
@@ -50,37 +72,37 @@ ok inert-derp-removed "$(ls $d/config | grep -c derp-inert)" 0
 # migrated root-owned files are fixed; user policy is preserved
 echo x > $d/lib/db.sqlite; chmod 644 $d/lib/db.sqlite; chown 0:0 $d/lib/db.sqlite
 printf '{"acls":[{"action":"accept","src":["*"],"dst":["*:*"]}]}\n' > $d/policy/policy.hujson
-"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+init_run $d HS_SERVER_DOMAIN=hs.example.com
 ok migrated-perm "$(stat -c '%a %u' $d/lib/db.sqlite)" "600 65532"
 ok policy-preserved "$(grep -c '"accept"' $d/policy/policy.hujson)" 1
 ok policy-snapshot-updated "$(grep -c '"accept"' $d/config/policy.hujson)" 1
 
 # fail-closed guards
 printf '{}\n' > $d/policy/policy.hujson
-"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+init_run $d HS_SERVER_DOMAIN=hs.example.com
 ok implicit-allow-all "$(st $d REASON)" implicit_allow_all
 ok implicit-allow-all-inert "$(grep -c '^listen_addr: 127.0.0.1:8443' $d/config/config.yaml)" 1
 ok implicit-allow-all-no-snapshot "$(ls $d/config | grep -c policy)" 0
 : > $d/policy/policy.hujson
-"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+init_run $d HS_SERVER_DOMAIN=hs.example.com
 ok empty-policy "$(st $d REASON)" implicit_allow_all
 # control bytes are refused: Headscale reads this as {} (allow all), the list is inside a // comment
 printf '{//\001{"acls":[]}\001\n}\n' > $d/policy/policy.hujson
-"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+init_run $d HS_SERVER_DOMAIN=hs.example.com
 ok ctrl-byte-policy "$(st $d REASON)" implicit_allow_all
 printf '{"acls":[]}\000\n' > $d/policy/policy.hujson
-"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+init_run $d HS_SERVER_DOMAIN=hs.example.com
 ok nul-byte-policy "$(st $d REASON)" implicit_allow_all
 printf '{"acls":[] /* caf\303\251 */}\r\n' > $d/policy/policy.hujson
-"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+init_run $d HS_SERVER_DOMAIN=hs.example.com
 ok utf8-crlf-policy-ok "$(st $d REASON)" ok
 printf '{"grants":[]}\n' > $d/policy/policy.hujson
 ln -s /etc/shadow $d/lib/evil
-"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+init_run $d HS_SERVER_DOMAIN=hs.example.com
 ok symlink "$(st $d REASON)" unsafe_files
 ok symlink-not-followed "$(stat -c '%u' /etc/shadow)" 0
 rm $d/lib/evil
-"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+init_run $d HS_SERVER_DOMAIN=hs.example.com
 ok grants-policy-ok "$(st $d REASON)" ok
 
 # settings with line breaks/tabs must not reach config.yaml (grep checks each line separately)
@@ -96,7 +118,7 @@ d=$(run tab1 HS_SERVER_DOMAIN=hs.example.com "HS_MAGICDNS_DOMAIN=a.internal	"); 
 
 # policy guard: only a TOP-LEVEL "acls"/"grants" LIST counts (Headscale: both nil => allow all)
 pol() { d=$(run pol-$1); printf '%s' "$2" > $d/policy/policy.hujson
-  "$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1; st $d REASON; }
+  init_run $d HS_SERVER_DOMAIN=hs.example.com; st $d REASON; }
 ok policy-acls-null "$(pol null '{"acls": null}')" implicit_allow_all
 ok policy-block-comment "$(pol block '{/* "acls": [] */ "groups": {}}')" implicit_allow_all
 ok policy-line-comment "$(pol line '{
@@ -116,15 +138,15 @@ ok policy-example-ok "$(pol example "$(cat "$here/../examples/policy.example.huj
 victim=$base/victim; echo keep > $victim
 for sub in config/config.yaml.new config/policy.hujson.new www/index.html www/cgi-bin status/state.new probe/result; do
   d=$(run sl-${sub//\//-}); mkdir -p $d/$(dirname $sub); rm -rf $d/$sub; ln -s $victim $d/$sub
-  "$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1; rc=$?
+  init_run $d HS_SERVER_DOMAIN=hs.example.com; rc=$?
   ok "symlink-$sub-refused" "$rc" 1
   ok "symlink-$sub-not-followed" "$(cat $victim)" keep
 done
-d=$(run stray); echo x > $d/www/stray.html; "$here/run-init.sh" $d >/dev/null 2>&1
+d=$(run stray); echo x > $d/www/stray.html; init_run $d
 ok www-stray-removed "$(ls $d/www | grep -c stray)" 0
 ok status-owner "$(stat -c '%u %a' $d/status)" "0 755"
 d=$(run probestale HS_SERVER_DOMAIN=hs.example.com); echo HEALTH=true > $d/probe/result
-"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+init_run $d HS_SERVER_DOMAIN=hs.example.com
 ok probe-stale-removed "$(ls -A $d/probe | wc -l)" 0
 
 # status CGI: no network, only strictly matching values from the probe result

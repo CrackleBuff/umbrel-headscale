@@ -286,7 +286,7 @@ python3 tools/build.py --check  # CI: fail if stale
 python3 tools/check_compose.py  # CI: no host hooks, privileges or extra mounts
 python3 tests/test_verify_image.py   # image-check logic
 python3 tests/test_check_compose.py  # guard rails reject forbidden changes
-sudo BUSYBOX=/path/to/busybox tests/test-init.sh   # init script tests
+tools/fetch-busybox.sh /tmp/bb && sudo BUSYBOX=/tmp/bb/bin/busybox tests/test-init.sh   # init tests (pinned busybox)
 ```
 
 See [`tests/README.md`](tests/README.md).
