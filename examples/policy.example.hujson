@@ -31,6 +31,9 @@
   ],
 
   // Let admins use any device as an exit node and approve the LAN route automatically.
+  // This skips the manual "approve-routes" step for admins' devices: any device
+  // logged in as an admin can then offer the home LAN or act as an exit node.
+  // Leave this block out if you prefer to approve each route yourself.
   "autoApprovers": {
     "routes": {"192.168.1.0/24": ["group:admins"]},
     "exitNode": ["group:admins"],

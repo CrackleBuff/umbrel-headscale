@@ -22,3 +22,5 @@ jobs:
           if grep -E '^\s*image:' cracklebuff-headscale/docker-compose.yml | grep -Ev '@sha256:[0-9a-f]{64}$'; then
             echo "unpinned image"; exit 1
           fi
+      - name: Headscale image contains the official release binary
+        run: python3 tools/verify_image.py

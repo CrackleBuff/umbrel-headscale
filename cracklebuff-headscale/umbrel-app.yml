@@ -18,7 +18,7 @@ environment:
     services:
       - init
     default: tailnet.internal
-    note: Base domain for device names (MagicDNS). Must not equal or contain the public domain.
+    note: Base domain for device names (MagicDNS). The public domain must not be the same as it or inside it (e.g. not "example.com" when the public name is "hs.example.com").
   - name: HS_TAILSCALE_DERP
     services:
       - init
@@ -32,8 +32,10 @@ environment:
   - name: HS_NODE_EXPIRY
     services:
       - init
-    default: "0"
-    note: Default key expiry for new user devices, e.g. 180d. 0 = never expire. Tagged devices never expire.
+    default: "180d"
+    note: >-
+      Key expiry for new user devices (180d, like Tailscale). Devices must log in again after this. 0 = never expire.
+      Tagged devices never expire; for an always-on server use a tag or "headscale nodes expire --disable".
   - name: HS_LOG_LEVEL
     services:
       - init
@@ -65,7 +67,7 @@ description: >-
 
   - New networks deny all traffic until you add access rules to the policy file
 
-  - Runs as an unprivileged user with a read-only filesystem and no extra capabilities; no Docker socket
+  - Headscale runs as an unprivileged user with a read-only filesystem and no extra capabilities (a short-lived setup helper runs as root with no network); no Docker socket
 
   - Certificates come from Let's Encrypt automatically; gRPC, metrics and debug endpoints only listen inside the container,
     and the public REST API needs an API key (none is created)

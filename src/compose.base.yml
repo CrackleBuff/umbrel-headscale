@@ -41,8 +41,8 @@ services:
     # apps' internal ports. It still has outbound internet (Let's Encrypt).
     networks: [edge]
     tmpfs:
-      - /tmp:size=64m,mode=1777
-      - /var/run/headscale:size=1m,uid=65532,gid=65532,mode=0700
+      - /tmp:size=64m,mode=1777,noexec,nosuid,nodev
+      - /var/run/headscale:size=1m,uid=65532,gid=65532,mode=0700,noexec,nosuid,nodev
     depends_on:
       init:
         condition: service_completed_successfully

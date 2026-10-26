@@ -17,12 +17,14 @@ Only the latest app version in this store is supported. It tracks the latest sta
 
 ## What this package promises
 
-- Images pinned by version and digest; no `latest` tags.
+- Images pinned by version and digest; no `latest` tags. CI checks the Headscale binary in the pinned image
+  against upstream `checksums.txt` (`tools/verify_image.py`).
 - No secrets or host-specific values in the repository. All keys are generated on the device.
 - Headscale runs as uid 65532 with a read-only filesystem, no capabilities, `no-new-privileges`, and no Docker socket.
-- Headscale is isolated on its own Docker network, away from other Umbrel apps.
-- Fails closed: missing or invalid settings, symlinks in the data folder, or a policy without an `acls`/`grants`
-  list keep the server inert instead of starting it in an unsafe state.
+- Headscale runs on its own Docker network, so it cannot reach other apps' internal (unpublished) ports. It can
+  still reach your LAN and the internet like any container.
+- Fails closed: missing or invalid settings, symlinks or device files in the data folder, or a policy without a
+  top-level `acls`/`grants` list keep the server inert (or stop the app) instead of starting it in an unsafe state.
 - Only TCP 443 (→30443) and UDP 3478 need to be reachable from the internet.
 
 See the threat model and hardening notes in the [README](README.md#threat-model).

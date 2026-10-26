@@ -22,7 +22,7 @@ EMAIL=$(printf '%s' "${HS_ACME_EMAIL:-}" | tr -d ' ')
 MAGIC=$(printf '%s' "${HS_MAGICDNS_DOMAIN:-tailnet.internal}" | tr 'A-Z' 'a-z' | tr -d ' ')
 TSDERP=$(printf '%s' "${HS_TAILSCALE_DERP:-false}" | tr 'A-Z' 'a-z')
 LOGLEVEL=$(printf '%s' "${HS_LOG_LEVEL:-info}" | tr 'A-Z' 'a-z')
-EXPIRY=$(printf '%s' "${HS_NODE_EXPIRY:-0}" | tr 'A-Z' 'a-z')
+EXPIRY=$(printf '%s' "${HS_NODE_EXPIRY:-180d}" | tr 'A-Z' 'a-z')
 
 HOSTRE='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$'
 STATE=configured
@@ -30,7 +30,17 @@ REASON=ok
 
 fail() { STATE=unconfigured; REASON=$1; }
 
-if [ -z "$DOMAIN" ]; then fail no_domain
+# Settings must be single-line printable ASCII. grep tests each line on its
+# own, so a newline (or tab) could otherwise smuggle extra lines into the
+# generated config.yaml. Reject such values instead of stripping them.
+BADCHARS=
+for v in "${HS_SERVER_DOMAIN:-}" "${HS_ACME_EMAIL:-}" "${HS_MAGICDNS_DOMAIN:-}" \
+         "${HS_TAILSCALE_DERP:-}" "${HS_LOG_LEVEL:-}" "${HS_NODE_EXPIRY:-}"; do
+  case "$v" in *[![:print:]]*) BADCHARS=1;; esac
+done
+
+if [ -n "$BADCHARS" ]; then fail bad_characters
+elif [ -z "$DOMAIN" ]; then fail no_domain
 elif ! printf '%s' "$DOMAIN" | grep -Eq "$HOSTRE" || [ ${#DOMAIN} -gt 253 ]; then fail bad_domain
 fi
 if [ "$STATE" = configured ]; then
@@ -43,23 +53,71 @@ if [ "$STATE" = configured ]; then
   fi
 fi
 # Headscale accepts Go durations; convert days to hours.
-case "$EXPIRY" in *d) EXPIRY="$(( ${EXPIRY%d} * 24 ))h";; esac
+# Only do arithmetic on a value the regex above accepted (digits + d); never on raw input.
+if [ "$STATE" = configured ]; then
+  case "$EXPIRY" in [1-9]*d) EXPIRY="$(( ${EXPIRY%d} * 24 ))h";; esac
+fi
 
-# Refuse symlinks/devices anywhere in the state we are about to chown.
-for d in "$LIB" "$POL" "$CFG"; do
-  if [ -n "$(find "$d" \( -type l -o -type b -o -type c -o -type p \) 2>/dev/null | head -n 1)" ]; then
-    fail unsafe_files
+# Refuse symlinks, devices, FIFOs and sockets anywhere in the data folder.
+# This script runs as root and writes or chowns files there, so a planted
+# symlink must never be followed.
+unsafe() { [ -n "$(find "$1" \( -type l -o -type b -o -type c -o -type p -o -type s \) 2>/dev/null | head -n 1)" ]; }
+# config/, www/ and status/ are written even when Headscale stays inert, so
+# stop here without writing anything (the app will not start; see its logs).
+for d in "$CFG" "$WWW" "$ST"; do
+  if unsafe "$d"; then
+    echo "init: refusing to start: $d contains a symlink, device, FIFO or socket" >&2
+    exit 1
   fi
 done
+# lib/ and policy/ are only written once configured, so report it on the status page.
+for d in "$LIB" "$POL"; do
+  if unsafe "$d"; then fail unsafe_files; fi
+done
 
-# An existing policy with no "acls"/"grants" list (e.g. empty file or "{}")
-# makes Headscale ALLOW ALL traffic. Refuse to start rather than fail open.
+# Headscale ALLOWS ALL traffic when the policy has neither an "acls" nor a
+# "grants" list: an empty file, "{}", "acls": null, a list hidden in a
+# /* comment */, or an "acls" key nested somewhere else. Refuse to start
+# rather than fail open. This small HuJSON scanner skips strings and
+# comments and prints "ok" only if the TOP-LEVEL object has an "acls" or
+# "grants" member (any case, as Headscale matches names case-insensitively)
+# whose value is a list. Anything it does not understand counts as unsafe.
+has_rule_list() {
+  awk '
+BEGIN { RS = "\001"; ok = 0; bad = 0 }
+{
+  s = $0; n = length(s); depth = 0; i = 1; expect = ""; key = ""
+  while (i <= n) {
+    c = substr(s, i, 1)
+    if (c == "/" && substr(s, i + 1, 1) == "/") { j = index(substr(s, i), "\n"); if (j == 0) break; i += j; continue }
+    if (c == "/" && substr(s, i + 1, 1) == "*") { j = index(substr(s, i + 2), "*/"); if (j == 0) { bad = 1; break }; i += j + 3; continue }
+    if (c ~ /[ \t\r\n]/) { i++; continue }
+    if (c == "\"") {
+      str = ""; i++
+      while (i <= n) { d = substr(s, i, 1); if (d == "\\") { str = str d substr(s, i + 1, 1); i += 2; continue }; if (d == "\"") break; str = str d; i++ }
+      i++
+      if (depth == 1 && expect == "") { key = tolower(str); expect = "colon"; continue }
+      if (expect == "value") expect = ""
+      continue
+    }
+    if (expect == "colon") { if (c == ":") { expect = "value"; i++; continue }; expect = "" }
+    if (expect == "value") { if ((key == "acls" || key == "grants") && c == "[") ok = 1; expect = "" }
+    if (c == "{" || c == "[") depth++
+    else if (c == "}" || c == "]") depth--
+    i++
+  }
+}
+END { if (ok && !bad) print "ok" }
+' "$1"
+}
 if [ "$STATE" = configured ] && [ -e "$POL/policy.hujson" ]; then
-  if [ ! -f "$POL/policy.hujson" ] || ! sed 's://.*$::' "$POL/policy.hujson" | grep -Eq '"(acls|grants)"[[:space:]]*:'; then
+  if [ ! -f "$POL/policy.hujson" ] || [ "$(has_rule_list "$POL/policy.hujson")" != ok ]; then
     fail implicit_allow_all
   fi
 fi
 
+# The status page is regenerated below; drop anything else that is in www/.
+find "$WWW" -mindepth 1 -delete
 mkdir -p "$CFG" "$WWW/cgi-bin" "$ST"
 
 if [ "$STATE" = configured ]; then
@@ -231,7 +289,7 @@ mv -f "$CFG/config.yaml.new" "$CFG/config.yaml"
   if [ "$STATE" = configured ]; then echo "DOMAIN=$DOMAIN"; echo "TSDERP=$TSDERP"; echo "MAGIC=$MAGIC"; fi
 } > "$ST/state.new"
 chmod 0644 "$ST/state.new"; mv -f "$ST/state.new" "$ST/state"
-chmod 0755 "$ST"
+chown -h 0:0 "$ST" "$ST/state"; chmod 0755 "$ST"
 
 # Status page files (static HTML + one CGI). Rewritten on every start.
 @@WWW_FILES@@
