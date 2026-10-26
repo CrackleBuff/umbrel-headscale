@@ -27,6 +27,12 @@ def build():
         "status.cgi", '"$WWW/cgi-bin/status"', "HSWWWCGI")
     script = (SRC / "init.sh").read_text().replace("@@WWW_FILES@@\n", www)
     assert "@@" not in script
+    # umbrelOS rewrites the compose file and adds a line break before indented
+    # lines (tools/umbreld_rewrite.py), which silently breaks "\" continuations.
+    for name, text in (("init.sh/www files", script), ("probe.sh", (SRC / "probe.sh").read_text())):
+        for n, line in enumerate(text.split("\n"), 1):
+            if line.rstrip().endswith("\\"):
+                sys.exit(f"{name} line {n}: no backslash line continuations (umbrelOS breaks them)")
     escaped = script.replace("$", "$$")
     # JSON string == valid YAML double-quoted scalar.
     probe = (SRC / "probe.sh").read_text().replace("$", "$$")

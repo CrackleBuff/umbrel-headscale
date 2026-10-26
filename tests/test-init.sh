@@ -53,8 +53,10 @@ ok expiry-days "$(grep -c 'expiry: 4320h' $d/config/config.yaml)" 1
 ok metrics-localhost "$(grep -c '^metrics_listen_addr: 127.0.0.1:9090' $d/config/config.yaml)" 1
 ok grpc-localhost "$(grep -c '^grpc_listen_addr: 127.0.0.1:50443' $d/config/config.yaml)" 1
 ok no-ts-derp "$(grep -c '^  urls: \[\]' $d/config/config.yaml)" 1
-ok logtail-off "$(grep -A1 '^logtail:' $d/config/config.yaml | grep -c 'enabled: false')" 1
-ok policy-file-mode "$(grep -A1 '^policy:' $d/config/config.yaml | grep -c 'mode: file')" 1
+# Parsed as YAML (not grep), so blank lines from the umbrelOS rewrite do not matter.
+cfgval() { python3 -c 'import sys,yaml;c=yaml.safe_load(open(sys.argv[1]));[c:=c[k] for k in sys.argv[2:]];print(c)' "$d/config/config.yaml" "$@"; }
+ok logtail-off "$(cfgval logtail enabled)" False
+ok policy-file-mode "$(cfgval policy mode)" file
 ok default-deny "$(grep -c '"acls": \[\]' $d/policy/policy.hujson)" 1
 ok lib-perm "$(stat -c '%a %u' $d/lib)" "700 65532"
 ok cfg-perm "$(stat -c '%a %u:%g' $d/config/config.yaml)" "640 0:65532"

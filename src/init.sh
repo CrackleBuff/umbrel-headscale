@@ -35,8 +35,10 @@ fail() { STATE=unconfigured; REASON=$1; }
 # own, so a newline (or tab) could otherwise smuggle extra lines into the
 # generated config.yaml. Reject such values instead of stripping them.
 BADCHARS=
-for v in "${HS_SERVER_DOMAIN:-}" "${HS_ACME_EMAIL:-}" "${HS_MAGICDNS_DOMAIN:-}" \
-         "${HS_TAILSCALE_DERP:-}" "${HS_LOG_LEVEL:-}" "${HS_NODE_EXPIRY:-}"; do
+# One line on purpose: umbrelOS rewrites the compose file and adds a line break
+# before indented lines, which breaks "\" line continuations (see
+# tools/umbreld_rewrite.py). Never continue a line with a backslash here.
+for v in "${HS_SERVER_DOMAIN:-}" "${HS_ACME_EMAIL:-}" "${HS_MAGICDNS_DOMAIN:-}" "${HS_TAILSCALE_DERP:-}" "${HS_LOG_LEVEL:-}" "${HS_NODE_EXPIRY:-}"; do
   case "$v" in *[![:print:]]*) BADCHARS=1;; esac
 done
 

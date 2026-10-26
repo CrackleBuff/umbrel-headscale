@@ -18,6 +18,8 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq python3-yaml
           tools/fetch-busybox.sh "$RUNNER_TEMP/busybox-root"
           sudo BUSYBOX="$RUNNER_TEMP/busybox-root/bin/busybox" tests/test-init.sh
+          # Again, on the script as umbrelOS rewrites it during install.
+          sudo UMBRELD_REWRITE=1 BUSYBOX="$RUNNER_TEMP/busybox-root/bin/busybox" tests/test-init.sh
       - name: Compose guard rails (no host hooks, privileges or extra mounts)
         run: |
           python3 tools/check_compose.py

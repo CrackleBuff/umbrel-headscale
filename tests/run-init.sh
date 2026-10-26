@@ -9,9 +9,15 @@ out=$1; shift
 bb=${BUSYBOX:-$(command -v busybox)}
 bin=$(mktemp -d); "$bb" --install -s "$bin"
 script=$(python3 - "$here/cracklebuff-headscale/docker-compose.yml" <<'PY'
-import sys, yaml
+import os, sys, yaml
 d = yaml.safe_load(open(sys.argv[1]))
-print(d["services"]["init"]["command"][2].replace("$$", "$"))
+s = d["services"]["init"]["command"][2]
+if os.environ.get("UMBRELD_REWRITE") == "1":
+    # Run the script the way umbrelOS actually stores it (see tools/umbreld_rewrite.py).
+    sys.path.insert(0, os.path.join(os.path.dirname(sys.argv[1]), "..", "tools"))
+    from umbreld_rewrite import mangle
+    s = mangle(s)
+print(s.replace("$$", "$"))
 PY
 )
 script=${script//\/out\//$out/}

@@ -18,5 +18,6 @@ if [ "$STATE" = configured ] && [ -f /probe/result ]; then
     KEY=$(printf '%s\n' "$R" | sed -n 's/^KEY=\(mkey:[0-9a-f]\{64\}\)$/\1/p' | head -n 1)
   fi
 fi
-printf '{"state":"%s","reason":"%s","domain":"%s","magicdns":"%s","tailscaleDerp":"%s","checked":%s,"publicHealth":%s,"noiseKey":"%s"}\n' \
-  "$STATE" "$REASON" "$DOMAIN" "$MAGIC" "$TSDERP" "$CHECKED" "$HEALTH" "$KEY"
+# No "\" line continuation: umbrelOS's compose rewrite would break it.
+FMT='{"state":"%s","reason":"%s","domain":"%s","magicdns":"%s","tailscaleDerp":"%s","checked":%s,"publicHealth":%s,"noiseKey":"%s"}\n'
+printf "$FMT" "$STATE" "$REASON" "$DOMAIN" "$MAGIC" "$TSDERP" "$CHECKED" "$HEALTH" "$KEY"
