@@ -104,11 +104,22 @@ Notable rejected claims:
 - **Accepted, not fixed:** a brief permission race while Headscale is running only lets you break your own
   install. Symlinked host folders need host admin access, which already means full control.
 
+## First real umbrelOS install (0.29.6 → 0.29.6-1)
+
+Not a security review; recorded because the fixes touch the setup script that runs as root.
+
+- **Install hang (14ea675):** umbrelOS rewrites the compose file on install and breaks `\` line continuations
+  in embedded scripts, so init failed and restarted forever. Scripts no longer use them; `tools/build.py`
+  refuses them; CI also runs the init tests on the script as umbrelOS rewrites it
+  (`tools/umbreld_rewrite.py`). No check or hardening was removed.
+- **Status page key (de2827b):** the probe reported the all-zero `legacyPublicKey` from `/key`. It now parses
+  `publicKey` only. Display only; nothing trusted the value.
+- **Docs:** `HS_NODE_EXPIRY=0` (never expire) is documented as an opt-in trade-off. The default stays `180d`.
+
 ## Not covered
 
 - No professional human security audit.
-- Not yet installed and tested on a real umbrelOS device. An earlier version was tested on a Raspberry Pi via
-  Portainer; the `probe` container and the checked policy copy were added after that.
+- Installed on one real umbrelOS device (with migrated data) only; no wider testing.
 - No external TCP/UDP port scan of a real deployment.
 - `govulncheck` not run against the pinned Headscale binary.
 - Headscale itself was not audited; only this packaging was.

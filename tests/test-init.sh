@@ -50,6 +50,7 @@ d=$(run conf HS_SERVER_DOMAIN=HS.Example.com HS_NODE_EXPIRY=180d)
 ok configured "$(st $d REASON)" ok
 ok domain-lowercased "$(st $d DOMAIN)" hs.example.com
 ok expiry-days "$(grep -c 'expiry: 4320h' $d/config/config.yaml)" 1
+ok expiry-never "$(d0=$(run exp0 HS_SERVER_DOMAIN=hs.example.com HS_NODE_EXPIRY=0); grep -c '^  expiry: 0$' $d0/config/config.yaml)" 1
 ok metrics-localhost "$(grep -c '^metrics_listen_addr: 127.0.0.1:9090' $d/config/config.yaml)" 1
 ok grpc-localhost "$(grep -c '^grpc_listen_addr: 127.0.0.1:50443' $d/config/config.yaml)" 1
 ok no-ts-derp "$(grep -c '^  urls: \[\]' $d/config/config.yaml)" 1

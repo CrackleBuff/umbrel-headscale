@@ -128,10 +128,24 @@ with a shell on the Umbrel can administer Headscale.
 | `HS_ACME_EMAIL` | *(empty)* | Optional Let's Encrypt account contact. Let's Encrypt no longer sends expiry reminder e-mails (since June 2025); renewal is automatic. |
 | `HS_MAGICDNS_DOMAIN` | `tailnet.internal` | Base domain for device names. The public domain must not be the same as it or inside it (e.g. not `example.com` when the public name is `hs.example.com`). Do not use a real domain you or others use on the internet: your devices would resolve names under it via Headscale instead. |
 | `HS_TAILSCALE_DERP` | `false` | `true` adds Tailscale Inc.'s public relays to the relay map. Devices then pick whichever relay is fastest for them, which is often Tailscale's, not just when yours fails. Traffic stays end-to-end encrypted, but Tailscale's relays see device IPs and traffic volume. |
-| `HS_NODE_EXPIRY` | `180d` | Key expiry for new user devices (Tailscale's default). `0` = never. Tagged devices never expire; for an always-on server use a tag or `$HS nodes expire -i <id> --disable`. |
+| `HS_NODE_EXPIRY` | `180d` | Key expiry for new user devices: `180d` (Tailscale's default), any `<n>d` or `<n>h`, or **`0` = never expire**. See [Device expiry](#device-expiry). |
 | `HS_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error`. `debug` logs much more detail about devices and requests; use it briefly for troubleshooting only. |
 
 Invalid values never produce a half-working server. The app goes inert and the status page says what is wrong.
+
+### Device expiry
+
+By default a new user device must log in again after 180 days (like Tailscale), so a lost or stolen device
+stops working on its own.
+
+**To keep devices signed in forever**, set `HS_NODE_EXPIRY` to `0` in the app's settings (umbrelOS → app →
+Settings) and restart the app. Devices then stay logged in until you remove them yourself
+(`$HS nodes expire -i <id>` or `$HS nodes delete -i <id>`). Trade-off: a lost device keeps access until you notice.
+
+- The setting applies to devices when they register. Devices already registered keep their expiry; to clear it
+  for one, run `$HS nodes expire -i <id> --disable`.
+- Tagged devices (servers, routers) never expire, whatever this setting says.
+- A device can ask for its own expiry when it logs in; Headscale honours that.
 
 ## Ports
 
@@ -235,7 +249,7 @@ and denial-of-service against your home connection.
 - **Keep the app updated.** Watch [Headscale releases](https://github.com/juanfont/headscale/releases) and
   [security advisories](https://github.com/juanfont/headscale/security/advisories).
 - **Keep the default-deny policy** and add narrow rules. Prefer groups and tags over `*`.
-- **Keep `HS_NODE_EXPIRY`** at `180d` (or shorter) so lost or stolen devices stop working on their own; expire or delete them as
+- **Keep `HS_NODE_EXPIRY`** at `180d` (or shorter) unless you chose `0` (never) on purpose, so lost or stolen devices stop working on their own; expire or delete them as
   soon as you notice (`$HS nodes expire -i <id>`, `$HS nodes delete -i <id>`).
 - **Avoid long-lived credentials.** Do not create reusable pre-auth keys or API keys unless needed. Give them
   short expiry, and expire them after use (`headscale apikeys expire`, `headscale preauthkeys expire`).

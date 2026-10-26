@@ -35,8 +35,9 @@ environment:
       - init
     default: "180d"
     note: >-
-      Key expiry for new user devices (180d, like Tailscale). Devices must log in again after this. 0 = never expire.
-      Tagged devices never expire; for an always-on server use a tag or "headscale nodes expire --disable".
+      Key expiry for new user devices: 180d (default, like Tailscale) means devices must log in again after 180 days.
+      Set 0 to never expire (devices stay signed in until you expire or delete them). Also accepts e.g. 90d or 720h.
+      Tagged devices never expire. Existing devices keep the expiry they registered with.
   - name: HS_LOG_LEVEL
     services:
       - init
@@ -49,7 +50,7 @@ environment:
     note: Headscale log level. Use debug only briefly for troubleshooting; it logs much more about your devices.
 category: networking
 name: Headscale
-version: "0.29.6"
+version: "0.29.6-1"
 tagline: Self-hosted Tailscale control server
 icon: https://raw.githubusercontent.com/juanfont/headscale/v0.29.6/docs/assets/logo/headscale3-dots.png
 description: >-
@@ -80,7 +81,19 @@ description: >-
 
   The app page shows status only. Devices are approved from the Umbrel terminal; see the README for commands,
   backup and restore, and the threat model.
-releaseNotes: ""
+releaseNotes: >-
+  Fixes for umbrelOS. Headscale is unchanged (v0.29.6).
+
+
+  - Fixed: the install could hang at 99%. umbrelOS reformats the app's compose file, which broke a line in the
+  setup script so it restarted in a loop. The setup script no longer uses that kind of line.
+
+  - Fixed: the status page showed an all-zero "Noise public key"; it now shows the server's real key.
+
+  - Clearer note on the "never expire" (0) device expiry option.
+
+
+  Your settings, keys, database and policy are kept.
 developer: Headscale authors (packaged by CrackleBuff)
 website: https://headscale.net
 dependencies: []
