@@ -17,6 +17,12 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq busybox-static python3-yaml
           sudo BUSYBOX=/bin/busybox tests/test-init.sh
+      - name: Compose guard rails (no host hooks, privileges or extra mounts)
+        run: |
+          python3 tools/check_compose.py
+          python3 tests/test_check_compose.py
+      - name: Image check logic tests
+        run: python3 tests/test_verify_image.py
       - name: Images are pinned by digest
         run: |
           if grep -E '^\s*image:' cracklebuff-headscale/docker-compose.yml | grep -Ev '@sha256:[0-9a-f]{64}$'; then

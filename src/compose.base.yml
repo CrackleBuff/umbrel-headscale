@@ -25,9 +25,12 @@ services:
       - ${APP_DATA_DIR}/data/policy:/out/policy
       - ${APP_DATA_DIR}/data/www:/out/www
       - ${APP_DATA_DIR}/data/status:/out/status
+      - ${APP_DATA_DIR}/data/probe:/out/probe
 
   headscale:
     image: ghcr.io/juanfont/headscale:v0.29.6@sha256:cabe84f0699913dbca9320f0883dca7565dd08df3c5be29edfabbebeff763966
+    # Explicit, so a changed image entrypoint cannot run something else.
+    entrypoint: ["/ko-app/headscale"]
     command: ["serve"]
     user: "65532:65532"
     restart: on-failure
@@ -54,6 +57,8 @@ services:
       - "3478:3478/udp"
     volumes:
       - ${APP_DATA_DIR}/data/config:/etc/headscale:ro
+      # Your editable policy, mounted only so "headscale policy check" can read
+      # it. Headscale itself uses the checked copy in /etc/headscale.
       - ${APP_DATA_DIR}/data/policy:/etc/headscale-policy:ro
       - ${APP_DATA_DIR}/data/lib:/var/lib/headscale
     healthcheck:
@@ -80,7 +85,29 @@ services:
     volumes:
       - ${APP_DATA_DIR}/data/www:/www:ro
       - ${APP_DATA_DIR}/data/status:/status:ro
+      - ${APP_DATA_DIR}/data/probe:/probe:ro
+
+  probe:
+    # Checks the public URL every minute for the status page. On the private
+    # edge network with Headscale, so the status page container itself never
+    # makes outbound requests.
+    image: busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+    user: "65534:65534"
+    restart: on-failure
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 16
+    mem_limit: 32m
+    networks: [edge]
+    command: ["sh", "-c", "@@PROBE_SCRIPT@@"]
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    volumes:
+      - ${APP_DATA_DIR}/data/status:/status:ro
+      - ${APP_DATA_DIR}/data/probe:/probe
 
 networks:
-  # Private bridge network for the internet-facing headscale service only.
+  # Private bridge network for the internet-facing headscale service (and its probe).
   edge: {}

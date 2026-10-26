@@ -13,12 +13,12 @@ environment:
   - name: HS_ACME_EMAIL
     services:
       - init
-    note: Optional e-mail for Let's Encrypt expiry notices. Leave empty to register without one.
+    note: Optional contact e-mail for your Let's Encrypt account (Let's Encrypt no longer sends expiry reminders; renewal is automatic). Leave empty to register without one.
   - name: HS_MAGICDNS_DOMAIN
     services:
       - init
     default: tailnet.internal
-    note: Base domain for device names (MagicDNS). The public domain must not be the same as it or inside it (e.g. not "example.com" when the public name is "hs.example.com").
+    note: Base domain for device names (MagicDNS). The public domain must not be the same as it or inside it (e.g. not "example.com" when the public name is "hs.example.com"). Do not use a real internet domain; your devices would look up names under it via Headscale.
   - name: HS_TAILSCALE_DERP
     services:
       - init
@@ -27,8 +27,9 @@ environment:
       - "false"
       - "true"
     note: >-
-      false (default) = only this server's embedded relay. true = also use Tailscale Inc.'s public relays as a fallback
-      (traffic stays end-to-end encrypted, but Tailscale can see relay metadata such as IP addresses).
+      false (default) = only this server's embedded relay. true = also offer Tailscale Inc.'s public relays; devices
+      then use whichever relay is fastest, often Tailscale's (traffic stays end-to-end encrypted, but Tailscale can see
+      relay metadata such as IP addresses).
   - name: HS_NODE_EXPIRY
     services:
       - init
@@ -45,7 +46,7 @@ environment:
       - warn
       - error
       - debug
-    note: Headscale log level.
+    note: Headscale log level. Use debug only briefly for troubleshooting; it logs much more about your devices.
 category: networking
 name: Headscale
 version: "0.29.6"

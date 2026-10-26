@@ -31,8 +31,8 @@ fetch('cgi-bin/status',{cache:'no-store'}).then(r=>r.json()).then(s=>{
  if(s.state!=='configured'){t.append(row('State',flag(false,'','Not configured')),row('Next step',reasons[s.reason]||s.reason));}
  else{
   document.querySelectorAll('.dom').forEach(e=>e.textContent=s.domain);
-  t.append(row('Server URL','https://'+s.domain),row('Public /health',flag(s.publicHealth,'reachable (pass)','not reachable from this Umbrel \u2014 check port forwarding / DNS / NAT loopback')),
-   row('Noise public key',s.noiseKey||'unknown'),row('Note','Checked from this Umbrel with busybox wget, which does not verify the TLS certificate. Use it to debug port forwarding, not as proof of identity.'),row('MagicDNS domain',s.magicdns),row('Tailscale public DERP',s.tailscaleDerp==='true'?'on':'off (embedded DERP only)'));
+  t.append(row('Server URL','https://'+s.domain),row('Public /health',s.checked?flag(s.publicHealth,'reachable (pass)','not reachable from this Umbrel \u2014 check port forwarding / DNS / NAT loopback'):'not checked yet (or the check is more than 5 minutes old); reload in a minute'),
+   row('Noise public key',s.noiseKey||'unknown'),row('Note','Checked once a minute from this Umbrel (one request, no redirects). The check does not verify the TLS certificate. Use it to debug port forwarding, not as proof of identity.'),row('MagicDNS domain',s.magicdns),row('Tailscale public DERP',s.tailscaleDerp==='true'?'on':'off (embedded DERP only)'));
  }
  el.appendChild(t);
 }).catch(()=>{document.getElementById('status').textContent='Status unavailable.'});

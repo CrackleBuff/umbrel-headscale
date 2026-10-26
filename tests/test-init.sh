@@ -37,6 +37,11 @@ ok default-deny "$(grep -c '"acls": \[\]' $d/policy/policy.hujson)" 1
 ok lib-perm "$(stat -c '%a %u' $d/lib)" "700 65532"
 ok cfg-perm "$(stat -c '%a %u:%g' $d/config/config.yaml)" "640 0:65532"
 ok pol-perm "$(stat -c '%a %u:%g' $d/policy/policy.hujson)" "640 0:65532"
+# Headscale reads only the checked copy of the policy (so restarts/SIGHUP cannot load an unchecked edit)
+ok policy-path-snapshot "$(grep -c '^  path: /etc/headscale/policy.hujson$' $d/config/config.yaml)" 1
+ok policy-snapshot-same "$(cmp -s $d/policy/policy.hujson $d/config/policy.hujson && echo same)" same
+ok policy-snapshot-perm "$(stat -c '%a %u:%g' $d/config/policy.hujson)" "640 0:65532"
+ok probe-dir-owner "$(stat -c '%u:%g %a' $d/probe)" "65534:65534 755"
 "$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
 ok default-policy-restart "$(st $d REASON)" ok
 ok expiry-default "$(d2=$(run expdef HS_SERVER_DOMAIN=hs.example.com); grep -c 'expiry: 4320h' $d2/config/config.yaml)" 1
@@ -48,15 +53,27 @@ printf '{"acls":[{"action":"accept","src":["*"],"dst":["*:*"]}]}\n' > $d/policy/
 "$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
 ok migrated-perm "$(stat -c '%a %u' $d/lib/db.sqlite)" "600 65532"
 ok policy-preserved "$(grep -c '"accept"' $d/policy/policy.hujson)" 1
+ok policy-snapshot-updated "$(grep -c '"accept"' $d/config/policy.hujson)" 1
 
 # fail-closed guards
 printf '{}\n' > $d/policy/policy.hujson
 "$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
 ok implicit-allow-all "$(st $d REASON)" implicit_allow_all
 ok implicit-allow-all-inert "$(grep -c '^listen_addr: 127.0.0.1:8443' $d/config/config.yaml)" 1
+ok implicit-allow-all-no-snapshot "$(ls $d/config | grep -c policy)" 0
 : > $d/policy/policy.hujson
 "$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
 ok empty-policy "$(st $d REASON)" implicit_allow_all
+# control bytes are refused: Headscale reads this as {} (allow all), the list is inside a // comment
+printf '{//\001{"acls":[]}\001\n}\n' > $d/policy/policy.hujson
+"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+ok ctrl-byte-policy "$(st $d REASON)" implicit_allow_all
+printf '{"acls":[]}\000\n' > $d/policy/policy.hujson
+"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+ok nul-byte-policy "$(st $d REASON)" implicit_allow_all
+printf '{"acls":[] /* caf\303\251 */}\r\n' > $d/policy/policy.hujson
+"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+ok utf8-crlf-policy-ok "$(st $d REASON)" ok
 printf '{"grants":[]}\n' > $d/policy/policy.hujson
 ln -s /etc/shadow $d/lib/evil
 "$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
@@ -97,7 +114,7 @@ ok policy-example-ok "$(pol example "$(cat "$here/../examples/policy.example.huj
 
 # root init must never write through symlinks in config/, www/ or status/
 victim=$base/victim; echo keep > $victim
-for sub in config/config.yaml.new www/index.html www/cgi-bin status/state.new; do
+for sub in config/config.yaml.new config/policy.hujson.new www/index.html www/cgi-bin status/state.new probe/result; do
   d=$(run sl-${sub//\//-}); mkdir -p $d/$(dirname $sub); rm -rf $d/$sub; ln -s $victim $d/$sub
   "$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1; rc=$?
   ok "symlink-$sub-refused" "$rc" 1
@@ -106,6 +123,33 @@ done
 d=$(run stray); echo x > $d/www/stray.html; "$here/run-init.sh" $d >/dev/null 2>&1
 ok www-stray-removed "$(ls $d/www | grep -c stray)" 0
 ok status-owner "$(stat -c '%u %a' $d/status)" "0 755"
+d=$(run probestale HS_SERVER_DOMAIN=hs.example.com); echo HEALTH=true > $d/probe/result
+"$here/run-init.sh" $d HS_SERVER_DOMAIN=hs.example.com >/dev/null 2>&1
+ok probe-stale-removed "$(ls -A $d/probe | wc -l)" 0
+
+# status CGI: no network, only strictly matching values from the probe result
+cgi() {  # cgi DIR -> JSON (runs the generated CGI with /status and /probe pointing at DIR)
+  sed -e "s#/status/state#$1/status/state#g" -e "s#/probe/result#$1/probe/result#g" "$1/www/cgi-bin/status" > "$1/cgi.sh"
+  env -i PATH="$bbbin" "${BUSYBOX:-busybox}" sh "$1/cgi.sh" | tail -n 1
+}
+bbbin=$(mktemp -d); "${BUSYBOX:-$(command -v busybox)}" --install -s "$bbbin"
+d=$(run cgi HS_SERVER_DOMAIN=hs.example.com)
+ok cgi-no-network "$(grep -c wget $d/www/cgi-bin/status)" 0
+ok cgi-unchecked "$(cgi $d | grep -o '"checked":[a-z]*')" '"checked":false'
+k=mkey:$(printf '%064d' 0 | tr 0 a)
+now=$(date +%s)
+printf 'DOMAIN=hs.example.com\nTIME=%s\nHEALTH=true\nKEY=%s\n' "$now" "$k" > $d/probe/result
+ok cgi-health "$(cgi $d | grep -o '"publicHealth":[a-z]*')" '"publicHealth":true'
+ok cgi-key "$(cgi $d | grep -o '"noiseKey":"[^"]*"')" "\"noiseKey\":\"$k\""
+printf 'DOMAIN=hs.example.com\nTIME=%s\nHEALTH=yes","x":"1\nKEY=%s","x":"1\n' "$now" "$k" > $d/probe/result
+ok cgi-junk-health "$(cgi $d | grep -o '"publicHealth":[a-z]*')" '"publicHealth":false'
+ok cgi-junk-key "$(cgi $d | grep -o '"noiseKey":"[^"]*"')" '"noiseKey":""'
+printf 'DOMAIN=hs.example.com\nTIME=%s\nHEALTH=true\nKEY=%s\n' $((now - 600)) "$k" > $d/probe/result
+ok cgi-stale "$(cgi $d | grep -o '"checked":[a-z]*,"publicHealth":[a-z]*')" '"checked":false,"publicHealth":false'
+printf 'DOMAIN=old.example.com\nTIME=%s\nHEALTH=true\nKEY=%s\n' "$now" "$k" > $d/probe/result
+ok cgi-other-domain "$(cgi $d | grep -o '"checked":[a-z]*,"publicHealth":[a-z]*')" '"checked":false,"publicHealth":false'
+ok probe-no-wget "$(grep -c wget "$here/../src/probe.sh")" 0
+rm -rf "$bbbin"
 
 rm -rf "$base"
 echo "passed=$pass failed=$failn"; [ $failn -eq 0 ]

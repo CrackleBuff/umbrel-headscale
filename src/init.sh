@@ -16,6 +16,7 @@ LIB=/out/lib
 POL=/out/policy
 WWW=/out/www
 ST=/out/status
+PR=/out/probe
 
 DOMAIN=$(printf '%s' "${HS_SERVER_DOMAIN:-}" | tr 'A-Z' 'a-z' | tr -d ' ')
 EMAIL=$(printf '%s' "${HS_ACME_EMAIL:-}" | tr -d ' ')
@@ -61,10 +62,15 @@ fi
 # Refuse symlinks, devices, FIFOs and sockets anywhere in the data folder.
 # This script runs as root and writes or chowns files there, so a planted
 # symlink must never be followed.
-unsafe() { [ -n "$(find "$1" \( -type l -o -type b -o -type c -o -type p -o -type s \) 2>/dev/null | head -n 1)" ]; }
-# config/, www/ and status/ are written even when Headscale stays inert, so
-# stop here without writing anything (the app will not start; see its logs).
-for d in "$CFG" "$WWW" "$ST"; do
+# A find error (unreadable entry, I/O error) also counts as unsafe.
+unsafe() {
+  _u=$(find "$1" \( -type l -o -type b -o -type c -o -type p -o -type s \) -print 2>&1) || return 0
+  [ -n "$_u" ]
+}
+# config/, www/, status/ and probe/ are written even when Headscale stays
+# inert, so stop here without writing anything (the app will not start; see
+# its logs).
+for d in "$CFG" "$WWW" "$ST" "$PR"; do
   if unsafe "$d"; then
     echo "init: refusing to start: $d contains a symlink, device, FIFO or socket" >&2
     exit 1
@@ -83,6 +89,10 @@ done
 # "grants" member (any case, as Headscale matches names case-insensitively)
 # whose value is a list. Anything it does not understand counts as unsafe.
 has_rule_list() {
+  # Control characters (other than tab/CR/LF) are refused: the scanner reads
+  # the file as one awk record split on \001, and Headscale allows such bytes
+  # inside comments, so they could hide a list from this check.
+  tr -d '\000-\010\013\014\016-\037\177' < "$1" | cmp -s - "$1" || return 0
   awk '
 BEGIN { RS = "\001"; ok = 0; bad = 0 }
 {
@@ -110,9 +120,17 @@ BEGIN { RS = "\001"; ok = 0; bad = 0 }
 END { if (ok && !bad) print "ok" }
 ' "$1"
 }
+# Headscale never reads data/policy/ directly: it reads a copy in config/
+# that passed this check. A Headscale-only restart, a crash restart or SIGHUP
+# therefore reloads the last checked policy, never an unchecked edit. The
+# copy is checked (not the original) so the file cannot change in between.
+rm -f "$CFG/policy.hujson.new"
 if [ "$STATE" = configured ] && [ -e "$POL/policy.hujson" ]; then
-  if [ ! -f "$POL/policy.hujson" ] || [ "$(has_rule_list "$POL/policy.hujson")" != ok ]; then
+  if [ ! -f "$POL/policy.hujson" ]; then
     fail implicit_allow_all
+  else
+    cat "$POL/policy.hujson" > "$CFG/policy.hujson.new"
+    if [ "$(has_rule_list "$CFG/policy.hujson.new")" != ok ]; then fail implicit_allow_all; fi
   fi
 fi
 
@@ -174,7 +192,7 @@ log:
   format: text
 policy:
   mode: file
-  path: /etc/headscale-policy/policy.hujson
+  path: /etc/headscale/policy.hujson
 dns:
   magic_dns: true
   base_domain: $MAGIC
@@ -218,6 +236,10 @@ POLICY
   find "$LIB" -type f -exec chmod 0600 {} +
   chown -h "0:$HS_GID" "$POL" "$POL/policy.hujson"
   chmod 0750 "$POL"; chmod 0640 "$POL/policy.hujson"
+  # New install: the copy is the default policy written just above.
+  if [ ! -e "$CFG/policy.hujson.new" ]; then cat "$POL/policy.hujson" > "$CFG/policy.hujson.new"; fi
+  chown -h "0:$HS_GID" "$CFG/policy.hujson.new"; chmod 0640 "$CFG/policy.hujson.new"
+  mv -f "$CFG/policy.hujson.new" "$CFG/policy.hujson"
 else
   # Not configured: run Headscale in an inert, localhost-only mode with state
   # in tmpfs, so nothing is created in the data folder (keys, db) and nothing
@@ -275,8 +297,8 @@ regions:
 DERP
   chown -h "0:$HS_GID" "$CFG/derp-inert.yaml"; chmod 0640 "$CFG/derp-inert.yaml"
 fi
-# Remove the inert DERP map once configured.
-if [ "$STATE" = configured ]; then rm -f "$CFG/derp-inert.yaml"; fi
+# Remove the inert DERP map once configured, and the checked policy copy when not.
+if [ "$STATE" = configured ]; then rm -f "$CFG/derp-inert.yaml"; else rm -f "$CFG/policy.hujson" "$CFG/policy.hujson.new"; fi
 
 chown -h "0:$HS_GID" "$CFG" "$CFG/config.yaml.new"
 chmod 0750 "$CFG"; chmod 0640 "$CFG/config.yaml.new"
@@ -290,6 +312,11 @@ mv -f "$CFG/config.yaml.new" "$CFG/config.yaml"
 } > "$ST/state.new"
 chmod 0644 "$ST/state.new"; mv -f "$ST/state.new" "$ST/state"
 chown -h 0:0 "$ST" "$ST/state"; chmod 0755 "$ST"
+
+# Reachability results from the probe service (written as uid 65534). Start
+# empty so an old result is never shown for a new domain.
+find "$PR" -mindepth 1 -delete
+chown -h 65534:65534 "$PR"; chmod 0755 "$PR"
 
 # Status page files (static HTML + one CGI). Rewritten on every start.
 @@WWW_FILES@@

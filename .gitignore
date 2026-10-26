@@ -10,3 +10,4 @@ cracklebuff-headscale/data/**
 *.crt
 .env
 tests/out/
+__pycache__/

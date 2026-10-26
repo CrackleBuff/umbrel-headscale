@@ -15,6 +15,6 @@ print(d["services"]["init"]["command"][2].replace("$$", "$"))
 PY
 )
 script=${script//\/out\//$out/}
-mkdir -p "$out"/{lib,config,policy,www,status}
+mkdir -p "$out"/{lib,config,policy,www,status,probe}
 env -i PATH="$bin" "$@" "$bb" sh -c "$script"
 rm -rf "$bin"

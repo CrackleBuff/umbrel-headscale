@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build cracklebuff-headscale/docker-compose.yml from src/.
 
-The init script (with the status page files embedded as heredocs) is inlined
-into the compose file so that it is updated together with the compose file on
+The init script (with the status page files embedded as heredocs) and the
+probe script are inlined into the compose file so that it is updated together with the compose file on
 app updates (umbrelOS only copies docker-compose.yml, *.template, exports.sh
 and hooks on update). Compose interpolates "$", so every "$" is escaped "$$".
 
@@ -29,8 +29,12 @@ def build():
     assert "@@" not in script
     escaped = script.replace("$", "$$")
     # JSON string == valid YAML double-quoted scalar.
+    probe = (SRC / "probe.sh").read_text().replace("$", "$$")
     base = (SRC / "compose.base.yml").read_text()
-    return base.replace('"@@INIT_SCRIPT@@"', json.dumps(escaped))
+    out = base.replace('"@@INIT_SCRIPT@@"', json.dumps(escaped))
+    out = out.replace('"@@PROBE_SCRIPT@@"', json.dumps(probe))
+    assert "@@" not in out
+    return out
 
 
 if __name__ == "__main__":

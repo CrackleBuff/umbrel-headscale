@@ -41,8 +41,9 @@ affiliated with Tailscale Inc. or Umbrel.
 4. **No CGNAT.** If your ISP shares one public IP between customers (carrier-grade NAT), port forwarding will not
    work. Check that the WAN IP in your router matches what <https://ifconfig.me> shows.
 5. **NAT loopback (hairpinning).** Devices at home also connect to the public name. Most routers handle this;
-   if devices at home cannot connect while devices on mobile data can, enable NAT loopback / hairpin NAT or add
-   a local DNS override for the name pointing at the Umbrel **and** forward 443 → 30443 for LAN traffic too.
+   if devices at home cannot connect while devices on mobile data can, enable NAT loopback / hairpin NAT on the
+   router. A local DNS override that points the name at the Umbrel does **not** work on its own: on the Umbrel,
+   port 443 belongs to umbrelOS, and Headscale listens on 30443.
 
 ## Install
 
@@ -52,7 +53,8 @@ affiliated with Tailscale Inc. or Umbrel.
    30443/tcp and 3478/udp) and no keys or database are created.
 3. Open the app's **Settings** in umbrelOS, set **HS_SERVER_DOMAIN** to your public name (and optionally the other
    settings), and save. The app restarts and becomes active. The first HTTPS request obtains the certificate.
-4. Open the app. The status page shows the configuration and whether `https://<your-domain>/health` answers.
+4. Open the app. The status page shows the configuration and whether `https://<your-domain>/health` answers
+   (checked from the Umbrel once a minute).
 
 ## Connect devices
 
@@ -81,7 +83,10 @@ approve an ID that is shown on a device in your hands, never one someone sends y
 
 New installs **deny all traffic between devices**. Devices can join, but cannot reach each other until you
 add rules. The policy file is `~/umbrel/app-data/cracklebuff-headscale/data/policy/policy.hujson`
-(or your apps data folder if you moved it). Edit it with `sudo`, check it, then restart the app:
+(or your apps data folder if you moved it). Edit it with `sudo`, check it, then restart the **whole app** from
+the umbrelOS menu. On each app start the setup helper checks the file and gives Headscale a checked copy
+(`config/policy.hujson`); Headscale never reads your working file directly. So an edit only takes effect after an
+app restart, and a crash-restart of Headscale alone keeps using the last checked copy:
 
 ```sh
 sudo nano ~/umbrel/app-data/cracklebuff-headscale/data/policy/policy.hujson
@@ -95,7 +100,8 @@ See [`examples/policy.example.hujson`](examples/policy.example.hujson) and the
 **Important:** in Headscale a policy without an `acls` or `grants` list (an empty file, `{}`, or `"acls": null`)
 means **allow all**. To prevent that by accident, the app refuses to start (status `implicit_allow_all`) unless the
 file's top level has an `"acls"` or `"grants"` key whose value is a list (`[]` is fine and denies everything).
-Lists that are commented out or nested inside another key do not count. If you really want
+Lists that are commented out or nested inside another key do not count, and files containing control characters
+(other than tab and line breaks) are refused. If you really want
 everyone to reach everything, say so explicitly:
 `{"acls": [{"action": "accept", "src": ["*"], "dst": ["*:*"]}]}`.
 
@@ -119,11 +125,11 @@ with a shell on the Umbrel can administer Headscale.
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `HS_SERVER_DOMAIN` | *(empty)* | Required. Public DNS name. Until set, the app stays inert. |
-| `HS_ACME_EMAIL` | *(empty)* | Optional Let's Encrypt contact e-mail. |
-| `HS_MAGICDNS_DOMAIN` | `tailnet.internal` | Base domain for device names. The public domain must not be the same as it or inside it (e.g. not `example.com` when the public name is `hs.example.com`). |
-| `HS_TAILSCALE_DERP` | `false` | `true` adds Tailscale Inc.'s public relays as a fallback. Traffic stays end-to-end encrypted, but Tailscale's relays see device IPs and traffic volume. |
+| `HS_ACME_EMAIL` | *(empty)* | Optional Let's Encrypt account contact. Let's Encrypt no longer sends expiry reminder e-mails (since June 2025); renewal is automatic. |
+| `HS_MAGICDNS_DOMAIN` | `tailnet.internal` | Base domain for device names. The public domain must not be the same as it or inside it (e.g. not `example.com` when the public name is `hs.example.com`). Do not use a real domain you or others use on the internet: your devices would resolve names under it via Headscale instead. |
+| `HS_TAILSCALE_DERP` | `false` | `true` adds Tailscale Inc.'s public relays to the relay map. Devices then pick whichever relay is fastest for them, which is often Tailscale's, not just when yours fails. Traffic stays end-to-end encrypted, but Tailscale's relays see device IPs and traffic volume. |
 | `HS_NODE_EXPIRY` | `180d` | Key expiry for new user devices (Tailscale's default). `0` = never. Tagged devices never expire; for an always-on server use a tag or `$HS nodes expire -i <id> --disable`. |
-| `HS_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error`. |
+| `HS_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error`. `debug` logs much more detail about devices and requests; use it briefly for troubleshooting only. |
 
 Invalid values never produce a half-working server. The app goes inert and the status page says what is wrong.
 
@@ -151,17 +157,17 @@ Everything lives in `~/umbrel/app-data/cracklebuff-headscale/data/`:
 | --- | --- | --- |
 | `lib/noise_private.key` | Server identity. If lost, **every device must re-login**. | **Yes** |
 | `lib/derp_server_private.key` | Embedded relay identity | **Yes** |
-| `lib/db.sqlite*` | Users, devices, routes, API key hashes | Yes (sensitive) |
+| `lib/db.sqlite*` | Users, devices, routes, keys and key hashes | **Yes** |
 | `lib/cache/` | Let's Encrypt account key and certificate | Yes |
 | `policy/policy.hujson` | Your access policy | No (but private) |
-| `config/`, `www/`, `status/` | Regenerated on every start | No |
+| `config/`, `www/`, `status/`, `probe/` | Regenerated on every start | No |
 
 Backup (consistent copy of the database):
 
 ```sh
 # stop the app in umbrelOS first, then:
-sudo tar -C ~/umbrel/app-data/cracklebuff-headscale/data -czf headscale-backup-$(date +%F).tgz lib policy
-sudo chmod 600 headscale-backup-*.tgz
+sudo sh -c 'umask 077; tar -C ~umbrel/umbrel/app-data/cracklebuff-headscale/data -czf headscale-backup-$(date +%F).tgz lib policy'
+ls -l headscale-backup-*.tgz   # should show -rw------- root
 ```
 
 Treat the archive like a password. Encrypt it before putting it in the cloud. umbrelOS's own backups also
@@ -171,6 +177,8 @@ Restore: install the app (leave it unconfigured), stop it, extract the archive i
 `~/umbrel/app-data/cracklebuff-headscale/data/` with `sudo tar -xzf ...`, set the same `HS_SERVER_DOMAIN`, and
 start it. On start the app fixes ownership (uid 65532) and modes (dirs 0700, files 0600). It refuses to start if
 it finds symlinks or device files there.
+
+**Uninstalling the app deletes this folder**, including the server keys. Make a backup first if you might come back.
 
 ## Upgrades
 
@@ -198,23 +206,24 @@ automatically and does not support downgrades, so **back up before every update*
 ## Threat model
 
 **Assets:** the noise and DERP private keys (impersonating your server), the database (device list, IPs,
-routes, API key hashes), your access policy, and your home LAN reachable through subnet routes or exit nodes.
+routes, keys), your access policy, and your home LAN reachable through subnet routes or exit nodes.
 
 **What the control server can do:** Headscale decides which devices exist and which may talk to each other.
 Whoever controls it can add a rogue device to your network and give it access (Tailscale has a
 "tailnet lock" feature for this, which **Headscale does not support**). Traffic between devices is end-to-end
-encrypted with WireGuard, and the server never sees it, but it can steer who you encrypt to. Protect
-it like the keys to your home network.
+encrypted with WireGuard, and the server never sees it, but it can steer who you encrypt to, and push DNS
+settings and routes to your devices. Protect it like the keys to your home network.
 
 | Attacker | Exposure | Mitigations in this app |
 | --- | --- | --- |
 | Internet (anyone) | TCP 443 and UDP 3478 | Only Headscale is exposed, as a non-root user with a read-only filesystem, no capabilities, `no-new-privileges` and a PID limit. TLS 1.2+ only (Go). Metrics/debug/gRPC on localhost only. Joining needs an admin approval (no pre-auth keys are created). REST API needs an API key (none are created). Embedded DERP requires clients known to this server (`verify_clients`). |
 | Internet → relay abuse | DERP/STUN | `verify_clients: true`; STUN is stateless. |
 | A device in your tailnet | Other devices, LAN | Default-deny policy; fail-closed check against a policy with no top-level `acls`/`grants` list (empty, `{}`, `null`); subnet routes and exit nodes need explicit approval. |
-| LAN users, other apps | Status page | Browsers reach it through the umbrelOS login (app proxy). Other containers on `umbrel_main_network` can read the same status JSON directly (domain, settings, health flag and the server's *public* key; nothing secret). It cannot change anything. |
+| LAN users, other apps | Status page | Browsers reach it through the umbrelOS login (app proxy). Other containers on `umbrel_main_network` can read the same status JSON directly (domain, settings, health flag and the server's *public* key; nothing secret). It cannot change anything and makes no network requests itself: the health check runs in a separate `probe` container on the `edge` network, and the page only shows strictly-formatted values from it. |
 | Other Umbrel apps | Docker network | Headscale runs on its own private bridge network (`edge`), not `umbrel_main_network`, so a compromised Headscale cannot reach other apps' internal ports. It does not mount the Docker socket or other apps' data. The init helper has no network at all. Residual: like any Docker container it can still open connections to your LAN, the internet and ports the Umbrel publishes on the host; filtering that needs host firewall rules an app cannot set. |
 | Umbrel admin / shell | Everything | Full trust: can read keys and run `headscale` commands. Use a strong umbrelOS password and keep SSH off the internet. |
-| Supply chain | Images, this repo | Images pinned by digest; CI checks that the pinned image's binary and entrypoint match upstream `checksums.txt` (`tools/verify_image.py`). umbrelOS does not auto-update community apps: review the changes before you click Update, because whoever controls this repository controls what the next update runs. |
+| Other apps with host access | Everything | Apps that mount the Docker socket or host folders (Portainer, file managers, some backup apps) can read the keys or take over this app. Install those only if you trust them as much as the Umbrel admin. |
+| Supply chain | Images, this repo | Images pinned by digest; CI checks that the pinned image's final binary, entrypoint and environment match the upstream release (`tools/verify_image.py`), and that the app adds no host hooks, privileges, Docker socket or mounts outside its data folder (`tools/check_compose.py`). These checks catch mistakes, not a malicious maintainer. **Installing or updating any community app is root-level trust in its author**: an app update can run commands as root on the Umbrel. umbrelOS does not auto-update community apps, so review the changes before you click Update. |
 
 **Out of scope / residual risks:** a compromise of Headscale itself (keep it updated), **DNS hijacking of your
 name** (whoever controls the name can get a valid Let's Encrypt certificate for it and impersonate your server to
@@ -230,7 +239,8 @@ and denial-of-service against your home connection.
   soon as you notice (`$HS nodes expire -i <id>`, `$HS nodes delete -i <id>`).
 - **Avoid long-lived credentials.** Do not create reusable pre-auth keys or API keys unless needed. Give them
   short expiry, and expire them after use (`headscale apikeys expire`, `headscale preauthkeys expire`).
-- **Leave `HS_TAILSCALE_DERP=false`** unless relaying is unreliable. The embedded relay is used first either way.
+- **Leave `HS_TAILSCALE_DERP=false`** unless relaying is unreliable. With it on, devices may use Tailscale's relays
+  whenever those are faster, not only as a fallback.
 - **Forward only 443/tcp and 3478/udp.** The REST API (`/api/v1`, `/swagger`) is served on the public port by
   upstream Headscale and cannot be turned off; it rejects requests without a valid API key.
 - **HSTS** is not sent by Headscale. Browsers are only used for the `/register` and `/apple`/`/windows` help
@@ -238,7 +248,9 @@ and denial-of-service against your home connection.
 - **Certificate rate limits.** Scanners that only offer RSA can make Headscale request a second (RSA)
   certificate. Let's Encrypt allows 5 identical certificates per week, which is normally plenty.
 - **Verify images yourself** before trusting an update. `python3 tools/verify_image.py` (also run in CI) downloads
-  the pinned image by digest and checks both binaries against the release checksums. By hand:
+  the pinned image by digest, applies its layers in order (so a later layer cannot swap the binary for a link or
+  delete it), and checks the final binary, entrypoint and environment against the release. By hand (simpler, it
+  only reads the binary):
 
   ```sh
   crane digest ghcr.io/juanfont/headscale:v0.29.6
@@ -248,7 +260,8 @@ and denial-of-service against your home connection.
   # x86 Umbrel: use linux/amd64 and linux_amd64; or run python3 tools/verify_image.py for both
   ```
 
-  Upstream images are not cosign-signed, so pinning by digest plus this checksum comparison is the provenance check.
+  Upstream images are not cosign-signed. This proves the pinned image matches the published release binary; it
+  cannot prove who built either one.
 
 ### Container layout and lint justifications
 
@@ -256,7 +269,8 @@ and denial-of-service against your home connection.
 | --- | --- | --- | --- |
 | `init` | busybox 1.38.0 (digest) | root | Runs once before Headscale, with **no network**, read-only root, `cap_drop: ALL` plus only `CHOWN`, `DAC_OVERRIDE`, `FOWNER` (needed to fix ownership of files copied in by users or restores), `no-new-privileges`. Validates settings, renders the config, creates the default-deny policy if missing, fixes modes, refuses symlinks/devices, and writes the status files. `restart: on-failure`. |
 | `headscale` | headscale v0.29.6 (digest) | 65532 | Own `edge` network, read-only root, `cap_drop: ALL`, `no-new-privileges`, `pids_limit`, `mem_limit: 512m`, tmpfs (`noexec,nosuid,nodev`) for `/tmp` and the socket dir, config and policy mounted read-only. Healthcheck `headscale health`. |
-| `web` | busybox 1.38.0 (digest) | 65534 | Static status page + a tiny CGI reading the status file. Read-only, `cap_drop: ALL`, `no-new-privileges`. |
+| `web` | busybox 1.38.0 (digest) | 65534 | Static status page + a tiny CGI reading the status files (no network requests). Read-only, `cap_drop: ALL`, `no-new-privileges`. |
+| `probe` | busybox 1.38.0 (digest) | 65534 | Once a minute sends one HTTPS GET each for `https://<your-domain>/health` and `/key` (no redirects followed, 8 s timeout, 4 KB cap; busybox does not verify the certificate, so the result is only a hint) and writes the result for the status page. On `edge` only, read-only, `cap_drop: ALL`, `no-new-privileges`, small PID and memory limits. |
 
 The Umbrel linter warns about `cap_add`, `security_opt` and top-level `networks`. All are intentional:
 `security_opt` only adds `no-new-privileges:true`, the init capabilities are the minimum needed to `chown`/`chmod`
@@ -269,6 +283,9 @@ app data, and the extra `edge` network isolates the internet-facing service from
 ```sh
 python3 tools/build.py          # regenerate
 python3 tools/build.py --check  # CI: fail if stale
+python3 tools/check_compose.py  # CI: no host hooks, privileges or extra mounts
+python3 tests/test_verify_image.py   # image-check logic
+python3 tests/test_check_compose.py  # guard rails reject forbidden changes
 sudo BUSYBOX=/path/to/busybox tests/test-init.sh   # init script tests
 ```
 
