@@ -1,7 +1,7 @@
 # Headscale for umbrelOS (community app store)
 
 This repository is an [umbrelOS community app store](https://github.com/getumbrel/umbrel-community-app-store)
-with one app: **[Headscale](https://headscale.net) v0.29.6**, the open-source, self-hosted Tailscale control server.
+with one app: **[Headscale](https://headscale.net) v0.29.7**, the open-source, self-hosted Tailscale control server.
 You keep using the official Tailscale apps on your devices. Only the coordination server (who is in your
 network, their public keys, and your access rules) runs on your Umbrel instead of Tailscale's cloud.
 
@@ -204,7 +204,10 @@ the changes before you click Update.
 Each release pins the Headscale image by **version and digest**. Before bumping, maintainers read the
 [upgrade notes](https://github.com/juanfont/headscale/blob/main/CHANGELOG.md), test on a copy of real data, and
 verify the image as described in [Hardening notes](#hardening-notes). Headscale migrates its database
-automatically and does not support downgrades, so **back up before every update**.
+automatically. It refuses a downgrade to an older minor version, so **back up before every update**.
+A later patch within the same minor version is allowed: 0.29.7 does not change the schema, and Headscale
+will start 0.29.6 again on that database. 0.29.7 can still trim an oversized stored hostname, endpoint list
+or route list the next time that device is saved.
 
 ## Migrating an existing Headscale
 
@@ -267,10 +270,10 @@ and denial-of-service against your home connection.
   only reads the binary):
 
   ```sh
-  crane digest ghcr.io/juanfont/headscale:v0.29.6
+  crane digest ghcr.io/juanfont/headscale:v0.29.7
   # compare the binary inside the image with the release checksums
-  crane export --platform linux/arm64 ghcr.io/juanfont/headscale:v0.29.6 - | tar -xO ko-app/headscale | sha256sum
-  curl -sL https://github.com/juanfont/headscale/releases/download/v0.29.6/checksums.txt | grep linux_arm64
+  crane export --platform linux/arm64 ghcr.io/juanfont/headscale:v0.29.7 - | tar -xO ko-app/headscale | sha256sum
+  curl -sL https://github.com/juanfont/headscale/releases/download/v0.29.7/checksums.txt | grep linux_arm64
   # x86 Umbrel: use linux/amd64 and linux_amd64; or run python3 tools/verify_image.py for both
   ```
 
@@ -282,7 +285,7 @@ and denial-of-service against your home connection.
 | Service | Image | User | Notes |
 | --- | --- | --- | --- |
 | `init` | busybox 1.38.0 (digest) | root | Runs once before Headscale, with **no network**, read-only root, `cap_drop: ALL` plus only `CHOWN`, `DAC_OVERRIDE`, `FOWNER` (needed to fix ownership of files copied in by users or restores), `no-new-privileges`. Validates settings, renders the config, creates the default-deny policy if missing, fixes modes, refuses symlinks/devices, and writes the status files. `restart: on-failure`. |
-| `headscale` | headscale v0.29.6 (digest) | 65532 | Own `edge` network, read-only root, `cap_drop: ALL`, `no-new-privileges`, `pids_limit`, `mem_limit: 512m`, tmpfs (`noexec,nosuid,nodev`) for `/tmp` and the socket dir, config and policy mounted read-only. Healthcheck `headscale health`. |
+| `headscale` | headscale v0.29.7 (digest) | 65532 | Own `edge` network, read-only root, `cap_drop: ALL`, `no-new-privileges`, `pids_limit`, `mem_limit: 512m`, tmpfs (`noexec,nosuid,nodev`) for `/tmp` and the socket dir, config and policy mounted read-only. Healthcheck `headscale health`. |
 | `web` | busybox 1.38.0 (digest) | 65534 | Static status page + a tiny CGI reading the status files (no network requests). Read-only, `cap_drop: ALL`, `no-new-privileges`. |
 | `probe` | busybox 1.38.0 (digest) | 65534 | Once a minute sends one HTTPS GET each for `https://<your-domain>/health` and `/key` (no redirects followed, 8 s timeout, 4 KB cap; busybox does not verify the certificate, so the result is only a hint) and writes the result for the status page. On `edge` only, read-only, `cap_drop: ALL`, `no-new-privileges`, small PID and memory limits. |
 
