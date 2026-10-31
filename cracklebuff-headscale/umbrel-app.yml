@@ -50,9 +50,9 @@ environment:
     note: Headscale log level. Use debug only briefly for troubleshooting; it logs much more about your devices.
 category: networking
 name: Headscale
-version: "0.29.6-1"
+version: "0.29.7"
 tagline: Self-hosted Tailscale control server
-icon: https://raw.githubusercontent.com/juanfont/headscale/v0.29.6/docs/assets/logo/headscale3-dots.png
+icon: https://raw.githubusercontent.com/juanfont/headscale/v0.29.7/docs/assets/logo/headscale3-dots.png
 description: >-
   ⚠️ This app runs a public-facing server. Before installing, you need a public DNS name pointing at your home IP and
   two port forwards on your router: TCP 443 → this Umbrel's port 30443, and UDP 3478 → port 3478. Then set
@@ -82,18 +82,20 @@ description: >-
   The app page shows status only. Devices are approved from the Umbrel terminal; see the README for commands,
   backup and restore, and the threat model.
 releaseNotes: >-
-  Fixes for umbrelOS. Headscale is unchanged (v0.29.6).
+  Security update to Headscale v0.29.7 (30 Oct 2026). No settings change.
 
 
-  - Fixed: the install could hang at 99%. umbrelOS reformats the app's compose file, which broke a line in the
-  setup script so it restarted in a loop. The setup script no longer uses that kind of line.
+  - Fixes denial-of-service issues in device registration and the control connection, and stops sending
+  metrics to devices that have not registered. Headscale's notes: none of the issues are critical.
 
-  - Fixed: the status page showed an all-zero "Noise public key"; it now shows the server's real key.
+  - A route that is a single address inside the device range (for example 100.64.0.11/32) is no longer
+  given to devices. It stays approved. Wider subnet routes are unchanged.
 
-  - Clearer note on the "never expire" (0) device expiry option.
+  - The database schema is unchanged. Your settings, keys, database and policy are kept. Back up first.
 
 
-  Your settings, keys, database and policy are kept.
+  Devices that use Tailscale SSH should also be updated to Tailscale 1.104.4 or newer. That fix is in the
+  Tailscale app on each device, not in this server.
 developer: Headscale authors (packaged by CrackleBuff)
 website: https://headscale.net
 dependencies: []

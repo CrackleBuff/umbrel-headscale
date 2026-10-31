@@ -28,7 +28,7 @@ services:
       - ${APP_DATA_DIR}/data/probe:/out/probe
 
   headscale:
-    image: ghcr.io/juanfont/headscale:v0.29.6@sha256:cabe84f0699913dbca9320f0883dca7565dd08df3c5be29edfabbebeff763966
+    image: ghcr.io/juanfont/headscale:v0.29.7@sha256:11f81665e842809db9fe3006a38c56a66e968baa5abd4bac498e86445572b970
     # Explicit, so a changed image entrypoint cannot run something else.
     entrypoint: ["/ko-app/headscale"]
     command: ["serve"]
