@@ -1,5 +1,10 @@
 # Headscale for umbrelOS (community app store)
 
+> [!IMPORTANT]
+> **This repository is no longer maintained.** On November 5, 2026 the owner stopped running this deployment and moved that network to hosted [Tailscale](https://tailscale.com/) with [Tailnet Lock](https://tailscale.com/kb/1226/tailnet-lock). This store will not receive further updates or support.
+>
+> This notice covers only this umbrelOS packaging. [Headscale](https://github.com/juanfont/headscale) is a separate upstream project. If you need a coordination server, assess maintained upstream alternatives. The guide below is kept for reference.
+
 This repository is an [umbrelOS community app store](https://github.com/getumbrel/umbrel-community-app-store)
 with one app: **[Headscale](https://headscale.net) v0.29.7**, the open-source, self-hosted Tailscale control server.
 You keep using the official Tailscale apps on your devices. Only the coordination server (who is in your
